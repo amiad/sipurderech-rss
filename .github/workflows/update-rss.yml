@@ -23,15 +23,20 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '24' # שודרג מ-20 ל-24
-        cache: 'npm'       # שומר את ה-cache של ה-dependencies לריצות מהירות יותר
+        # הסרנו את cache: 'npm' כדי למנוע את הקריסה כשאין קובץ lock
 
-    # שלב נחוץ: התקנת חבילות ה-npm (כמו axios ו-cheerio) לפני הרצת הסקריפט
+    # התקנה חכמה: אם קיים package.json נשתמש בו, אם לא - נתקין ישירות את החבילות הנחוצות
     - name: Install dependencies
       run: |
-        if [ -f package-lock.json ]; then
-          npm ci
+        if [ -f package.json ]; then
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
         else
-          npm install
+          echo "No package.json found. Installing axios and cheerio directly..."
+          npm install axios cheerio
         fi
 
     - name: Run Scraper
