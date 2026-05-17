@@ -1,0 +1,32 @@
+name: Update RSS Feed
+
+on:
+  schedule:
+    # ירוץ אוטומטית בכל יום בשעה 06:00 בבוקר (זמן UTC)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # מאפשר לך להריץ את האוטומציה ידנית מתי שתרצה לבדיקה
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/with-node@v4
+      with:
+        node-version: '20'
+
+    - name: Run Scraper
+      run: node scraper.js
+
+    - name: Commit and Push changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add feed.xml
+        # נבצע קומיט רק אם הקובץ אכן השתנה, כדי למנוע שגיאות בריצות ריקות
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update RSS feed" && git push)
