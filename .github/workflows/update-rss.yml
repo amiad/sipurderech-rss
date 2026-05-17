@@ -10,20 +10,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # הגדרת משתנה סביבה שמאלצת את האקשנים לרוץ על Node.js 24 ולהעלים את האזהרה
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
+    # שודרג ל-v4.2.2 שמנקה אזהרות תאימות
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
 
+    # שודרג ל-v5 שתומך נייטיב ב-Node 24
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
-        node-version: '24' # שודרג מ-20 ל-24
-        # הסרנו את cache: 'npm' כדי למנוע את הקריסה כשאין קובץ lock
+        node-version: '24'
 
     # התקנה חכמה: אם קיים package.json נשתמש בו, אם לא - נתקין ישירות את החבילות הנחוצות
     - name: Install dependencies
