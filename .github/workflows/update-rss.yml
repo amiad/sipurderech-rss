@@ -23,6 +23,16 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '24' # שודרג מ-20 ל-24
+        cache: 'npm'       # שומר את ה-cache של ה-dependencies לריצות מהירות יותר
+
+    # שלב נחוץ: התקנת חבילות ה-npm (כמו axios ו-cheerio) לפני הרצת הסקריפט
+    - name: Install dependencies
+      run: |
+        if [ -f package-lock.json ]; then
+          npm ci
+        else
+          npm install
+        fi
 
     - name: Run Scraper
       run: node scraper.js
