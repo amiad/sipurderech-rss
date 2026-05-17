@@ -2,40 +2,91 @@ const fs = require('fs');
 
 async function generateRss() {
     try {
-        // 1. משיכת ה-HTML הגולמי מהאתר
-        const response = await fetch('https://www.sipurderech.co.il/%D7%99%D7%A9%D7%A8%D7%9A%D7%9C');
-        const html = await response.text();
+        console.log("מתחיל למשוך את קוד ה-HTML מהאתר...");
+        
+        const response = await fetch('https://www.sipurderech.co.il/%D7%99%D7%A9%D7%A8%D7%9A%D7%9C', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7'
+            }
+        });
 
-        // 2. חילוץ תגית ה-JSON של ה-Schema באמצעות ביטוי רגולרי (Regex)
-        const regex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g;
-        let match;
+        if (!response.ok) {
+            throw new Error(`השרת החזיר שגיאת סטטוס: ${response.status} ${response.statusText}`);
+        }
+
+        const html = response.text();
+        console.log(`ה-HTML ירד בהצלחה. גודל: ${html.length} תווים.`);
+
         let articlesData = null;
 
-        while ((match = regex.exec(html)) !== null) {
+        // --- ניסיון 1: חילוץ דרך __NEXT_DATA__ (המקור האמין ביותר ב-Next.js) ---
+        const nextDataRegex = /<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/;
+        const nextDataMatch = html.match(nextDataRegex);
+        
+        if (nextDataMatch) {
             try {
-                const json = JSON.parse(match[1].trim());
-                if (Array.isArray(json)) {
-                    const itemList = json.find(obj => obj['@type'] === 'ItemList');
-                    if (itemList && itemList.itemListElement) {
-                        articlesData = itemList.itemListElement;
-                        break;
+                console.log("נמצאה תגית __NEXT_DATA__, מנסה לחלץ נתונים...");
+                const nextJson = JSON.parse(nextDataMatch[1].trim());
+                
+                // ניווט דינמי בתוך ה-Props של Next.js כדי למצוא את רשימת המאמרים
+                // המבנה לרוב נמצא תחת pageProps
+                const pageProps = nextJson.props?.pageProps;
+                if (pageProps) {
+                    // מחפש מערך שמכיל אובייקטים עם שדות כמו url או name
+                    const possibleLists = Object.values(pageProps).find(val => Array.isArray(val) && val.length > 0 && (val[0].url || val[0].name));
+                    if (possibleLists) {
+                        articlesData = possibleLists.map(item => ({
+                            name: item.name || item.title,
+                            url: item.url ? (item.url.startsWith('http') ? item.url : `https://www.sipurderech.co.il${item.url}`) : ''
+                        })).filter(item => item.name && item.url);
+                        console.log(`הנתונים חולצו בהצלחה מ-__NEXT_DATA__ (נמצאו ${articlesData.length} פריטים).`);
                     }
                 }
             } catch (e) {
-                // התעלמות מסקריפטים אחרים שלא עוברים פארסינג חלק
+                console.log("הניסיון לחלץ מ-__NEXT_DATA__ נכשל, עובר לניסיון הבא...");
             }
         }
 
-        if (!articlesData || articlesData.length === 0) {
-            throw new Error("לא נמצאו נתוני מסלולים בקוד המקור של הדף");
+        // --- ניסיון 2: חילוץ מרוכך מתוך תגיות ה-Schema (אם ניסיון 1 נכשל) ---
+        if (!articlesData) {
+            console.log("מנסה חילוץ מרוכך מתגיות application/ld+json...");
+            const schemaRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g;
+            let match;
+
+            while ((match = schemaRegex.exec(html)) !== null) {
+                try {
+                    const cleanJsonText = match[1].replace(/[\u200B-\u200D\uFEFF]/g, '').trim(); // ניקוי תווים נסתרים
+                    const json = JSON.parse(cleanJsonText);
+                    
+                    const target = Array.isArray(json) ? json.find(obj => obj['@type'] === 'ItemList') : (json['@type'] === 'ItemList' ? json : null);
+                    
+                    if (target && target.itemListElement) {
+                        articlesData = target.itemListElement.map(item => ({
+                            name: item.name,
+                            url: item.url
+                        }));
+                        console.log(`הנתונים חולצו בהצלחה מה-Schema (נמצאו ${articlesData.length} פריטים).`);
+                        break;
+                    }
+                } catch (e) {
+                    // המשך ללולאה הבאה
+                }
+            }
         }
 
-        // 3. בניית ה-XML של ה-RSS בתצורה סטנדרטית
+        // --- בדיקת בטיחות סופית ---
+        if (!articlesData || articlesData.length === 0) {
+            console.log("הצצה לתוכן ה-HTML שהתקבל (תווים 1000-2000):");
+            console.log(html.substring(1000, 2000));
+            throw new Error("לא נמצאו נתוני מסלולים באף אחד מהמקורות בדף.");
+        }
+
+        // 3. בניית ה-XML של ה-RSS
         let rssItems = '';
         articlesData.forEach(item => {
-            // האתר לא מספק תאריך ב-JSON, נשתמש בתאריך הנוכחי בריצה
             const pubDate = new Date().toUTCString();
-            
             rssItems += `
         <item>
             <title><![CDATA[${item.name}]]></title>
@@ -58,9 +109,8 @@ async function generateRss() {
 </channel>
 </rss>`;
 
-        // 4. שמירת הפיד לקובץxml
         fs.writeFileSync('feed.xml', rssFeed.trim());
-        console.log('קובץ feed.xml נוצר בהצלחה עם ' + articlesData.length + ' פריטים.');
+        console.log('קובץ feed.xml נוצר בהצלחה.');
 
     } catch (error) {
         console.error('שגיאה במהלך הפקת ה-RSS:', error.message);
