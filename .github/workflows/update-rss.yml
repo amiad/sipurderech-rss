@@ -10,13 +10,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # החזרת משתנה הסביבה כדי להשתיק את האזהרה של גיטהאב
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-    # שודרג ל-v4.2.2 שמנקה אזהרות תאימות
     - name: Checkout repository
       uses: actions/checkout@v4.2.2
 
-    # שודרג ל-v5 שתומך נייטיב ב-Node 24
     - name: Setup Node.js
       uses: actions/setup-node@v5
       with:
