@@ -16,7 +16,7 @@ async function generateRss() {
             throw new Error(`השרת החזיר שגיאת סטטוס: ${response.status} ${response.statusText}`);
         }
 
-        const html = response.text();
+        const html = await response.text();
         console.log(`ה-HTML ירד בהצלחה. גודל: ${html.length} תווים.`);
 
         let articlesData = null;
